@@ -3,14 +3,22 @@ service: api-comentario
 
 provider:
   name: aws
-  runtime: python3.13	
+  runtime: python3.13
+  region: us-east-1
   # Default memory size for functions (default: 1024MB)
   memorySize: 1024
   timeout: 20
+
+  # Usas un rol ya existente (no modificaremos sus políticas aquí)
   iam:
-    role: arn:aws:iam::456183835700:role/LabRole	
+    role: arn:aws:iam::456183835700:role/LabRole
+
+  stage: ${opt:stage, 'dev'}
+
   environment:
     TABLE_NAME: ${sls:stage}-t_comentarios
+    # bucket único por cuenta y stage (evita colisiones globales de nombres)
+    INGEST_BUCKET: ${self:service}-${sls:stage}-${aws:accountId}-ingest
 
 functions:
   crear:
@@ -38,5 +46,37 @@ resources:
             KeyType: HASH
           - AttributeName: uuid
             KeyType: RANGE
-        # Set the capacity to auto-scale
         BillingMode: PAY_PER_REQUEST
+
+    IngestBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.INGEST_BUCKET}
+        VersioningConfiguration:
+          Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+
+    IngestBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref IngestBucket
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: AllowLabRolePutObject
+              Effect: Allow
+              Principal:
+                AWS: arn:aws:iam::456183835700:role/LabRole
+              Action:
+                - s3:PutObject
+              Resource: arn:aws:s3:::${self:provider.environment.INGEST_BUCKET}/*
+
+  Outputs:
+    IngestBucketName:
+      Value: ${self:provider.environment.INGEST_BUCKET}
