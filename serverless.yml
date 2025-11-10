@@ -9,7 +9,6 @@ provider:
   memorySize: 1024
   timeout: 20
 
-  # Usas un rol ya existente (no modificaremos sus políticas aquí)
   iam:
     role: arn:aws:iam::456183835700:role/LabRole
 
